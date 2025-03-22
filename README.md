@@ -22,7 +22,7 @@ This script automatically watches a directory for changes and commits them to gi
 .\git-autocommit.ps1 -WatchDir "C:\path\to\your\project"
 ```
 
-3. The script will watch for file changes and automatically commit them with descriptive messages
+3. The script will watch for file changes and automatically commit them with descriptive messages + Your reason which will be prompted from you!
 4. Press Ctrl+C to stop watching
 
 ## Features
@@ -80,7 +80,7 @@ chmod +x git-autocommit.sh
 ./git-autocommit.sh /path/to/your/project
 ```
 
-3. The script will watch for file changes and automatically commit them with descriptive messages
+3. The script will watch for file changes and automatically commit them with descriptive messages + Your reason which will be prompted from you!
 4. Press Ctrl+C to stop watching
 
 ## Features
