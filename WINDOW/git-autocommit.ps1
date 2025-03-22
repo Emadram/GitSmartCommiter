@@ -20,13 +20,6 @@ function Get-DiffInfo {
         $_ -replace "^@@ -([0-9]+)(,[0-9]+)? \+([0-9]+)(,[0-9]+)? @@.*", '$1-$3'
     } | Select-Object -First 1
     
-    # Extract actual content changes (added and removed lines)
-    $addedLines = $diffOutput | Select-String -Pattern "^\+" | Where-Object { $_ -notmatch "^\+\+\+" } | 
-                  ForEach-Object { $_ -replace "^\+", "" } | Select-Object -First 3
-    
-    $removedLines = $diffOutput | Select-String -Pattern "^-" | Where-Object { $_ -notmatch "^---" } | 
-                    ForEach-Object { $_ -replace "^-", "" } | Select-Object -First 3
-    
     # Build commit message
     $commitMsg = (Split-Path $File -Leaf)
     
@@ -37,40 +30,25 @@ function Get-DiffInfo {
         $commitMsg += " lines: Unknown"
     }
     
-    # Add inserted content
-    if ($addedLines) {
-        $addedContent = ($addedLines -join " ").Trim()
-        if ($addedContent.Length -gt 50) {
-            $addedContent = $addedContent.Substring(0, 47) + "..."
-        }
-        $commitMsg += " | Inserted: $addedContent"
-    } else {
-        $commitMsg += " | Inserted: None"
-    }
-    
-    # Add removed content
-    if ($removedLines) {
-        $removedContent = ($removedLines -join " ").Trim()
-        if ($removedContent.Length -gt 50) {
-            $removedContent = $removedContent.Substring(0, 47) + "..."
-        }
-        $commitMsg += " | Removed: $removedContent"
-    } else {
-        $commitMsg += " | Removed: None"
-    }
-    
     # Check if this is a replacement (both additions and removals)
-    if ($addedLines -and $removedLines) {
+    if ($diffOutput -match "^\+" -and $diffOutput -match "^-") {
         $commitMsg += " | Type: Replacement"
-    } elseif ($addedLines) {
+    } elseif ($diffOutput -match "^\+") {
         $commitMsg += " | Type: Insertion"
-    } elseif ($removedLines) {
+    } elseif ($diffOutput -match "^-") {
         $commitMsg += " | Type: Deletion"
     } else {
         $commitMsg += " | Type: Unknown Change"
     }
     
     return $commitMsg
+}
+
+# Function to get user input for commit reason
+function Get-CommitReason {
+    Write-Host "Enter the reason for the commit:" -ForegroundColor Yellow
+    $reason = Read-Host
+    return $reason
 }
 
 # Check if we're in a git repository
@@ -106,6 +84,12 @@ $onChange = Register-ObjectEvent -InputObject $watcher -EventName Changed -Actio
         # Get commit message based on changes before adding
         $commitMessage = Get-DiffInfo $relPath
         
+        # Get user input for commit reason
+        $commitReason = Get-CommitReason
+        
+        # Append user reason to commit message
+        $commitMessage += " | Reason: $commitReason"
+        
         # Add the file to git staging
         git add $relPath
         
@@ -135,11 +119,14 @@ $onCreated = Register-ObjectEvent -InputObject $watcher -EventName Created -Acti
     if (Test-Path $filePath -PathType Leaf) {
         Write-Output "Detected new file: $relPath"
         
+        # Get user input for commit reason
+        $commitReason = Get-CommitReason
+        
         # Add the file to git staging
         git add $relPath
         
         # Commit
-        git commit -m "$relPath | Type: New File"
+        git commit -m "$relPath | Type: New File | Reason: $commitReason"
         Write-Output "Committed new file $relPath"
     }
 }
@@ -155,11 +142,14 @@ $onDeleted = Register-ObjectEvent -InputObject $watcher -EventName Deleted -Acti
     
     Write-Output "Detected deleted file: $relPath"
     
+    # Get user input for commit reason
+    $commitReason = Get-CommitReason
+    
     # Stage the deletion
     git rm $relPath
     
     # Commit the deletion
-    git commit -m "$relPath | Type: Deleted File"
+    git commit -m "$relPath | Type: Deleted File | Reason: $commitReason"
     Write-Output "Committed deletion of $relPath"
 }
 
