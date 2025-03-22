@@ -17,10 +17,6 @@ get_diff_info() {
     # Extract line numbers of modified lines
     local line_nums=$(echo "$diff_output" | grep -E "^@@" | sed -E 's/^@@ -([0-9]+)(,[0-9]+)? \+([0-9]+)(,[0-9]+)? @@.*/\1-\3/')
     
-    # Extract actual content changes (added, removed, and modified lines)
-    local added_lines=$(echo "$diff_output" | grep "^+" | grep -v "^+++" | sed 's/^+//' | head -3)
-    local removed_lines=$(echo "$diff_output" | grep "^-" | grep -v "^---" | sed 's/^-//' | head -3)
-    
     # Build commit message
     commit_msg="$(basename "$file")"
     
@@ -31,45 +27,28 @@ get_diff_info() {
         commit_msg+=" lines: Unknown"
     fi
     
-    # Add inserted content
-    if [ -n "$added_lines" ]; then
-        # Clean up and limit length
-        added_content=$(echo "$added_lines" | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        if [ ${#added_content} -gt 50 ]; then
-            added_content="${added_content:0:47}..."
-        fi
-        commit_msg+=" | Inserted: $added_content"
-    else
-        commit_msg+=" | Inserted: None"
-    fi
-    
-    # Add removed content
-    if [ -n "$removed_lines" ]; then
-        # Clean up and limit length
-        removed_content=$(echo "$removed_lines" | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        if [ ${#removed_content} -gt 50 ]; then
-            removed_content="${removed_content:0:47}..."
-        fi
-        commit_msg+=" | Removed: $removed_content"
-    else
-        commit_msg+=" | Removed: None"
-    fi
-    
     # Check if this is a replacement (both additions and removals)
-    if [ -n "$added_lines" ] && [ -n "$removed_lines" ]; then
+    if echo "$diff_output" | grep -q "^+" && echo "$diff_output" | grep -q "^-"; then
         commit_msg+=" | Type: Replacement"
-    elif [ -n "$added_lines" ]; then
+    elif echo "$diff_output" | grep -q "^+"; then
         commit_msg+=" | Type: Insertion"
-    elif [ -n "$removed_lines" ]; then
+    elif echo "$diff_output" | grep -q "^-"; then
         commit_msg+=" | Type: Deletion"
     else
         commit_msg+=" | Type: Unknown Change"
     fi
     
     echo "$commit_msg"
-    
-    echo "$commit_msg"
 }
+
+# Function to get user input even when in a pipe
+get_commit_reason() {
+    # Direct access to the terminal, bypassing the pipe's stdin
+    echo "Enter the reason for the commit:" > /dev/tty
+    read -r reason < /dev/tty
+    echo "$reason"
+}
+
 # Check if fswatch is installed
 if ! command -v fswatch > /dev/null; then
     echo "fswatch not found. Please install it with: brew install fswatch"
@@ -85,8 +64,6 @@ echo "Watching $WATCH_DIR for changes. Press Ctrl+C to stop."
 cd "$WATCH_DIR" || exit 1
 # Watch for file changes using fswatch (macOS compatible)
 fswatch -0 -e "\.git/" -e ".*~$" -e "4913" . | while read -d "" -r file_event; do
-    # Get full path
-    full_path="$WATCH_DIR/$file_event"
     echo "Detected change in: $file_event"
     
     # Skip . files and directories
@@ -95,22 +72,43 @@ fswatch -0 -e "\.git/" -e ".*~$" -e "4913" . | while read -d "" -r file_event; d
         continue
     fi
     
-    # Add any file that exists
-    if [ -f "$file_event" ]; then
+    # Make sure we have the correct path to the file
+    # If file_event is a relative path, make it absolute
+    if [[ "$file_event" != /* ]]; then
+        file_path="$WATCH_DIR/$file_event"
+    else
+        file_path="$file_event"
+    fi
+    
+    # Process the file if it exists
+    if [ -f "$file_path" ]; then
+        # Skip if no actual changes
+        if git diff --quiet -- "$file_path"; then
+            echo "No changes to commit for $file_path"
+            continue
+        fi
+        
         # Get commit message based on changes before adding
-        commit_message=$(get_diff_info "$file_event")
+        commit_message=$(get_diff_info "$file_path")
+        
+        # Get user input using our special function
+        commit_reason=$(get_commit_reason)
+        
+        # Append user reason to commit message
+        commit_message+=" | Reason: $commit_reason"
         
         # Add the file to git staging
-        git add "$file_event"
+        git add "$file_path"
         
         # Commit only if there are changes to commit
-        if git diff --staged --quiet; then
-            echo "No changes to commit for $file_event"
-        else
+        if ! git diff --staged --quiet; then
             git commit -m "$commit_message"
-            echo "Committed changes in $file_event"
+            echo "Committed changes in $file_path"
+            echo "Continuing to watch for changes... (Press Ctrl+C to stop)"
+        else
+            echo "No changes to commit for $file_path"
         fi
     else
-        echo "File not found: $file_event"
+        echo "File not found: $file_path (Maybe it was deleted?)"
     fi
 done
