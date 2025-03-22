@@ -1,5 +1,5 @@
 .DS_Store
 git-autocommit.ps1
-Testing.txt
+*.txt
 git-auto-commit.sh
 .qodo
