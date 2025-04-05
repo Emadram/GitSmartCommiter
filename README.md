@@ -1,4 +1,4 @@
-# Git Auto-Commit for Windows
+# Git Auto-Commiter for Windows
 
 This script automatically watches a directory for changes and commits them to git with descriptive commit messages.
 
@@ -52,7 +52,7 @@ The script uses PowerShell's `FileSystemWatcher` class to monitor file system ev
 - If you get permission errors, try running PowerShell as administrator
 
 -------------------------------------------------------------------------------
-# Git Auto-Commit for macOS
+# Git Auto-Commiter for macOS
 
 This script automatically watches a directory for changes and commits them to Git with descriptive commit messages.
 
